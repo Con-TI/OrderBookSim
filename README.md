@@ -1,2 +1,2 @@
-Run test.cpp on VScode to see errors.
-I am unsure how to fix the errors.
+Run main.exe to simulate orderbook.
+time is taken to start from 0 and move in increments of 1.
