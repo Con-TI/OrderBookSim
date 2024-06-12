@@ -773,6 +773,11 @@ public:
             money += abs(order.price*order.quantity);
         }
     }
+
+    void endDay(){
+        pendingBuyOrders.clear();
+        pendingSellOrders.clear();
+    }
 };
 
 int main(){
