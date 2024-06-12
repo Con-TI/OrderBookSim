@@ -95,7 +95,6 @@ public:
     };
 
     multimap<FillType,pair<double,multimap<OrderType,vector<int>>>> matchOrders(){
-        cout<<"Matching Orders"<<endl;
         multimap<FillType,pair<double,multimap<OrderType,vector<int>>>> response;
         int buyTime; int buyerID; int sellTime; int sellerID; int quantityBuy; int quantitySell;
         multimap<OrderType,vector<int>> filledOrders; vector<int> filledOrder;
@@ -450,8 +449,22 @@ public:
 
         bidI = Bids.begin();
         askI = Asks.begin();
-        lowestAsk = askI->first;
-        highestBid = bidI->first;
+        if (askI!=Asks.end()){
+            lowestAsk = askI->first;
+        }
+        else{
+            lowestAsk = bidI->first;
+        }
+        if (bidI!=Bids.end()){
+            highestBid = bidI->first;            
+        }
+        else{
+            highestBid = askI->first;
+        }
+        if (askI==Asks.end() && bidI==Bids.end()){
+            lowestAsk = midPrice;
+            highestBid = midPrice;
+        }
         double midprice = round((((highestBid) + (lowestAsk)))/2*100)/100;
         double BAspread = round((((lowestAsk)-(highestBid))/(highestBid)*100)*100)/100;
         midPrice = midprice;
@@ -785,10 +798,10 @@ int main(){
     int day = 0;
 
     int dayLimit;
-    cout << "How many days? ";
+    cout << "How many days(>0)? ";
     cin >> dayLimit;
     int dayLength;
-    cout << "How long is one day? ";
+    cout << "How long is one day(>1)? ";
     cin>> dayLength;
     int num_stocks;
     cout << "How many stocks? ";
@@ -855,7 +868,13 @@ int main(){
             }
             exchange.displayBook();
         }
-        this_thread::sleep_for(500ms);
+        //
+        //
+        //
+        this_thread::sleep_for(200ms);
+        //
+        //
+        //
         time+=1;
         if (time==dayLength){
             time = 0;
@@ -873,5 +892,7 @@ int main(){
 
     cout<<endl;
     cout<<"Simulation Complete. Press ENTER to close.";
-    return 0;
+    cin.sync();
+    cin.get();
+    cin.ignore();
 }
