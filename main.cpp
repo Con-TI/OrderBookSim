@@ -9,8 +9,11 @@
 #include <algorithm>
 #include <iomanip>
 #include <iterator>
-#include "include/color.cpp"
+#include <chrono>
+#include <time.h>
+#include "include/color.hpp"
 #include <random>
+#include <thread>
 
 using namespace std;
 
@@ -48,9 +51,12 @@ private:
 
     vector<double> findIntersectingPrices(){
         set<double> buyPrices, sellPrices;
-        for (const auto& elem : buyOrders) buyPrices.insert(elem.first);
-        for (const auto& elem : sellOrders) sellPrices.insert(elem.first);
-
+        for (const auto& elem : buyOrders) {
+            buyPrices.insert(elem.first);
+        }
+        for (const auto& elem : sellOrders) {
+            sellPrices.insert(elem.first);
+        }
         vector<double> overlappingPrices;
         set_intersection(buyPrices.begin(),buyPrices.end(),sellPrices.begin(),sellPrices.end(),back_inserter(overlappingPrices));
         return overlappingPrices;
@@ -89,6 +95,7 @@ public:
     };
 
     multimap<FillType,pair<double,multimap<OrderType,vector<int>>>> matchOrders(){
+        cout<<"Matching Orders"<<endl;
         multimap<FillType,pair<double,multimap<OrderType,vector<int>>>> response;
         int buyTime; int buyerID; int sellTime; int sellerID; int quantityBuy; int quantitySell;
         multimap<OrderType,vector<int>> filledOrders; vector<int> filledOrder;
@@ -97,27 +104,30 @@ public:
         vector<double> overlappingPrices = findIntersectingPrices();
         for (const double& price: overlappingPrices){
             int q;
-            auto i = buyOrders.find(price); auto j = sellOrders.find(price);
-            multimap<int,vector<int>> buyTimeList = i -> second; multimap<int,vector<int>> sellTimeList = i -> second;
+            auto i = buyOrders.find(price); 
+            auto j = sellOrders.find(price);
+            multimap<int,vector<int>> buyTimeList = i -> second; 
+            multimap<int,vector<int>> sellTimeList = i -> second;
             
-            for (auto k = buyTimeList.begin(); k  != buyTimeList.end(); ++k){
+            for (auto k = buyTimeList.begin(); k  != buyTimeList.end();){
                 vector<int> bvec = k -> second;
                 quantityBuy = bvec[0]; buyerID = bvec[1]; buyTime = k->first;
 
-                for (auto w = sellTimeList.begin(); w != sellTimeList.end(); ++w){
+                for (auto w = sellTimeList.begin(); w != sellTimeList.end();){
                     vector<int> svec = w -> second;
                     quantitySell = svec[0]; sellerID = svec[1]; sellTime = w->first;
 
                     q = quantitySell - quantityBuy;
                     if (q<0){
-                        sellTimeList.erase(w);
+                        w = sellTimeList.erase(w);
                         filledOrder = {sellTime, sellerID, quantitySell};
                         filledOrders.insert(make_pair(OrderType::SELL,filledOrder));
 
                         quantityBuy = abs(q);
+                        ;
                     }
                     else if(q>0){
-                        buyTimeList.erase(k);
+                        k = buyTimeList.erase(k);
                         filledOrder = {buyTime, buyerID, quantityBuy};
                         filledOrders.insert(make_pair(OrderType::BUY,filledOrder));
 
@@ -129,11 +139,11 @@ public:
                         break;
                     }
                     else{
-                        buyTimeList.erase(k);
+                        k = buyTimeList.erase(k);
                         filledOrder = {buyTime, buyerID, quantityBuy};
                         filledOrders.insert(make_pair(OrderType::BUY,filledOrder));
 
-                        sellTimeList.erase(w);
+                        w = sellTimeList.erase(w);
                         filledOrder = {sellTime, sellerID, quantitySell};
                         filledOrders.insert(make_pair(OrderType::SELL,filledOrder));
                         break;
@@ -147,16 +157,15 @@ public:
                     partialOrders.insert(make_pair(OrderType::BUY,partialOrder));
                     break;
                 }
-
             }
             if (buyTimeList.empty()){
-                buyOrders.erase(i);
+                i = buyOrders.erase(i);
             }
             else{
                 i->second = buyTimeList;
             }
             if (sellTimeList.empty()){
-                sellOrders.erase(j);
+                j = sellOrders.erase(j);
             }
             else{
                 j->second = sellTimeList;
@@ -173,7 +182,7 @@ public:
         for (auto i = buyOrders.begin(); i!=buyOrders.end();++i){
             double priceBuy = i->first;
             int quantityBuy = 0;
-            multimap<int,vector<int>> buyTimeList;
+            multimap<int,vector<int>> buyTimeList = i->second;
             for (auto j = buyTimeList.begin(); j!= buyTimeList.end();++j){
                 vector<int> bvec = j->second;
                 int qB = bvec[0]; 
@@ -185,7 +194,7 @@ public:
         for (auto i = sellOrders.begin(); i!=sellOrders.end();++i){
             double priceSell = i->first;
             int quantitySell = 0;
-            multimap<int,vector<int>> sellTimeList;
+            multimap<int,vector<int>> sellTimeList = i->second;
             for (auto j = sellTimeList.begin(); j!= sellTimeList.end();++j){
                 vector<int> svec = j->second;
                 int qS = svec[0]; 
@@ -209,41 +218,70 @@ private:
     OrderBook Book;
     int stockId;
     multimap<OrderType,pair<double,int>> neatBook;
-    int startingPriceBand = rand()%4;
-    int minPrice = 25 + (priceBands.find(startingPriceBand) -> second);
-    int maxPrice = priceBands.find(startingPriceBand+1) -> second;
-    int increment = priceIncrements.find(startingPriceBand) -> second;
-    double startingPrice = minPrice + (rand() % ((maxPrice-minPrice)/increment))*increment;
-    int shares = rand()%4990000 + 10000;
-    multimap<int,Trader>* tradersPtr;
+    int startingPriceBand;
+    int minPrice;
+    int maxPrice;
+    int increment;
+    double startingPrice;
+    int shares;
+    double baseFundamentalValue;
+    double midPrice;
+    double bidAskSpread;
+    double lowestAsk;
+    double highestBid;
 
 public:
     ExchangeAgent(int id){
+        srand((unsigned) time(0));
         stockId = id;
+        startingPriceBand = rand()%4;
+        minPrice = 50 + (priceBands.find(startingPriceBand) -> second);
+        maxPrice = priceBands.find(startingPriceBand+1) -> second;
+        increment = priceIncrements.find(startingPriceBand) -> second;
+        startingPrice = minPrice + (rand() % ((maxPrice-minPrice)/increment))*increment;
+        shares = rand()%4990000 + 10000;
+        baseFundamentalValue = startingPrice + ((rand()%2)*2-1)*increment*10;
+        midPrice = startingPrice;
+        bidAskSpread = 0;
+        lowestAsk = startingPrice;
+        highestBid = startingPrice;
+    };
+
+    double bASpread(){
+        return bidAskSpread;
     }
 
-    double baseFundamentalValue = startingPrice + ((rand()%2)*2-1)*5;
-    double midPrice = startingPrice;
-    double bidAskSpread = 0;
-    double lowestAsk = startingPrice;
-    double highestBid = startingPrice;
+    double baseFundamentalVal(){
+        return baseFundamentalValue;
+    }
 
-    void setTradersList(multimap<int,Trader>& tradersList){
-        tradersPtr = &tradersList;
+    double highBid(){
+        return highestBid;
+    }
+
+    double lowAsk(){
+        return lowestAsk;
+    }
+
+    double midP(){
+        return midPrice;
     }
 
     void updatefundamentalValue(){
+        int band = checkPriceBand(midPrice);
+        increment = priceIncrements.find(band)->second;
         if (baseFundamentalValue > 10){
-            double change = ((rand()%2)*2-1)*(rand()%3);
+            double change = ((rand()%2)*2-1)*(rand()%3)*increment;
             baseFundamentalValue += change;
         }
         else{
-            double change = rand()%3;
+            double change = rand()%3*increment;
             baseFundamentalValue += change;
         }
     }
 
-    void initialDistributionOfStocks(multimap<int,Trader>& traders){
+    multimap<int,Order> initialDistributionOfStocks(const vector<int>& traderIds){
+        multimap<int,Order> toSend;
         int totalNum = 1000;
         for (int i = 0; i!=9; ++i){
             totalNum+=1000*(rand()%2);
@@ -251,17 +289,17 @@ public:
         int storeNum = totalNum;
         int relative;
         while (storeNum!=0){
-            for (auto i = traders.begin();i!=traders.end();++i){
-                Trader& trader = i->second;
+            for (size_t i = 0;i<traderIds.size();++i){
+                int traderId = traderIds[i];
                 int divisor = rand()%10 + 4;
                 relative = storeNum%divisor;
                 storeNum -= relative;
-                int traderShare= shares * (relative/totalNum);
+                int traderShare= (shares * relative)/totalNum;
                 Order order(stockId,-1,startingPrice,traderShare,OrderType::BUY);
-                trader.addHolding(order);
-                i->second = trader;
+                toSend.insert(make_pair(traderId,order));
             }
         }
+        return toSend;
     };
 
     void traderToExchangeLimit(const Order& order, const int& time){
@@ -272,10 +310,10 @@ public:
         Book.resetBook();
     }
 
-    void compileBook(){
-        multimap<int,Trader> & traders = *tradersPtr;
+    multimap<int,Order> compileBook(){
         multimap<FillType,pair<double,multimap<OrderType,vector<int>>>> response = Book.matchOrders();
         neatBook = Book.compressBook();
+        multimap<int,Order> responseL;
         for (auto i = response.begin();i!=response.end();++i){
             FillType filltype = i->first;
             double price = (i->second).first;
@@ -285,21 +323,25 @@ public:
                 vector<int> vec = j->second;
                 int traderId = vec[1];
                 int quantity = vec[2];
-                Trader& trader = traders.find(traderId) -> second;
+                // cout<<quantity<<endl;
                 Order order(stockId,-1,price,-quantity,type);
-                trader.receiveResponse(order);
+                responseL.insert(make_pair(traderId,order));
             }
         }
+        return responseL;
     };
 
     void displayBook(){
-        system("cls");
         cout<<endl;
         cout<<endl;
         cout<<"Stock ID: "<<stockId<<endl;
         cout<<endl;
         cout<<" |     Quantity     |    "<<dye::red("Bid")<<"    |    "<<dye::green("Ask")<<"    |     Quantity     | "<<endl;
-        cout<<" --------------------------------------------------------------- "<<endl;
+        cout<<" ";
+        for (int i=0;i<63;++i){
+            cout<<"-";
+        }
+        cout<<" "<<endl;
 
         multimap<double,int, greater<double>> Bids;
         multimap<double,int> Asks;
@@ -320,31 +362,44 @@ public:
             if (bidI != Bids.end()){
                 cout<< " |";
                 int qDigits = floor(log10(bidI->second)+1);
+                // cout<<float(bidI->second);
                 even = qDigits %2 ;
                 if (even == 0){
-                    space = (18-qDigits)/2;
+                    space = (19-1-qDigits)/2;
                 }
                 else{
-                    space = (18-1-qDigits)/2;
+                    space = (19-qDigits)/2;
                 }
-                cout<<setw(space)<<bidI -> second<<setw(18-qDigits-space)<<"|";
+                for (int i=0;i<(18-space-qDigits);++i){
+                    cout<<" ";
+                }
+                cout<<(bidI -> second);
+                for (int i=0;i<space;++i){
+                    cout<<" ";
+                }
+                cout<<"|";
 
                 int pDigits = floor(log10(bidI->first)+1);
                 even = pDigits % 2;
                 if (even == 0){
-                    space = (11-1-pDigits)/2;
+                    space = (12-pDigits)/2;
                 }
                 else{
-                    space = (11-pDigits)/2;
+                    space = (12-1-pDigits)/2;
                 }
-                cout<<setw(space)<<dye::red(bidI -> first)<<setw(11-pDigits-space);
+                for (int i=0;i<(11-space-pDigits);++i){
+                    cout<<" ";
+                }
+                cout<<dye::red(bidI -> first);
+                for (int i=0;i<space;++i){
+                    cout<<" ";
+                }
 
                 ++bidI;
             }
             else{
                 cout<<" |";
-                cout<<setw(18)<<"|"<<setw(11);
-                ++bidI;
+                cout<<setw(19)<<"|"<<setw(12);
             }
 
             cout<<"|";
@@ -353,32 +408,44 @@ public:
                 int pDigits = floor(log10(askI->first)+1);
                 even = pDigits % 2;
                 if (even == 0){
-                    space = (11-1-pDigits)/2;
+                    space = (12-pDigits)/2;
                 }
                 else{
-                    space = (11-pDigits)/2;
+                    space = (12-1-pDigits)/2;
                 }
-                cout<<setw(space)<<dye::green(askI -> first)<<setw(11-pDigits-space)<<"|";
+                for (int i=0;i<(11-space-pDigits);++i){
+                    cout<<" ";
+                }
+                cout<<dye::green(askI -> first);
+                for (int i=0;i<space;++i){
+                    cout<<" ";
+                }
+                cout<<"|";
 
                 int qDigits = floor(log10(askI->second)+1);
                 even = qDigits %2 ;
                 if (even == 0){
-                    space = (18-qDigits)/2;
+                    space = (19-1-qDigits)/2;
                 }
                 else{
-                    space = (18-1-qDigits)/2;
+                    space = (19-qDigits)/2;
                 }
-                cout<<setw(space)<<askI -> second<<setw(18-qDigits-space);
+                for (int i=0;i<(18-space-qDigits);++i){
+                    cout<<" ";
+                }
+                cout<<askI -> second;
+                for (int i=0;i<space;++i){
+                    cout<<" ";
+                }
                 cout<<"| "<<endl;
                 ++askI;
             }
             else{
-                cout<<setw(11)<<"|"<<setw(18);
+                cout<<setw(12)<<"|"<<setw(20);
                 cout<<"| "<<endl;
-                ++askI;
             }
         }
-        cout<<" |"<<setw(18)<<"|"<<setw(11)<<"|"<<setw(11)<<"|"<<setw(18)<<"| "<<endl;
+        cout<<" |"<<setw(19)<<"|"<<setw(12)<<"|"<<setw(12)<<"|"<<setw(20)<<"| "<<endl;
         cout<<endl<<endl;
 
         bidI = Bids.begin();
@@ -400,16 +467,16 @@ class Trader{
 private:
     int traderId;
     
-    int intelligence = rand()%100;
-    int trender = rand()%100;
+    int intelligence;
+    int trender;
     multimap<int,vector<double>> midPriceMemory;
-    int smaLength = rand()%30+10;
-    int hft = rand()%100;
-    int meanReversion = rand()%100;
-    int tradeFreq = rand()%100*hft/10000;
+    int smaLength;
+    int hft;
+    int meanReversion;
+    double tradeFreq;
 
     multimap<int,pair<double,int>> holdings;
-    int money = rand()%100000000 + 500000;
+    int money;
     multimap<int,pair<double,int>> pendingBuyOrders;
     multimap<int,pair<double,int>> pendingSellOrders;
 
@@ -459,18 +526,20 @@ private:
         status = TraderStatus::IDLE;
     }
 
-    void resetSentiments(){
+    void resetSentiments(multimap<int,ExchangeAgent> & stocks){
         for (auto i=sentiments.begin();i!=sentiments.end();++i){
-            i->second = 0;
+            double midPrice = (stocks.find((i ->first)) -> second).midP();
+            int band = checkPriceBand(midPrice);
+            double increment = priceIncrements.find(band) ->second;
+            i->second = ((rand()%2)*2-1)*increment;
         }
     }
 
     void analyzeStock(const int& stockId,const int& time){
-        // Ranges between -100 and 100
         ExchangeAgent& exchange = (*stocksPtr).find(stockId) -> second;
         double evalScore;
         
-        double noise = ((rand()%2)*2-1)*(rand()%(100-intelligence))/20;
+        double noise = ((rand()%2)*2-1)*((rand()%(100-intelligence)));
 
         vector<double>& priceMemoryVec = midPriceMemory.find(stockId)->second;
         double mean = accumulate(priceMemoryVec.begin(),priceMemoryVec.end(),0.0)/priceMemoryVec.size();
@@ -486,78 +555,136 @@ private:
         }
         double trendScore = trend*(rand()%trender);
 
-        double& spread = exchange.bidAskSpread;
-        double hftScore = spread*(rand()%hft)/2;
+        double spread = exchange.bASpread();
+        double hftScore = spread*(rand()%hft);
 
         double personalSentiment = sentiments.find(stockId)->second;
-        double relFundamentalValue = exchange.baseFundamentalValue + personalSentiment;
-        double meanRevScore = (relFundamentalValue-priceMemoryVec.back())*(rand()%meanReversion)*(rand()%meanReversion)*2/(relFundamentalValue+priceMemoryVec.back());
+        double relFundamentalValue = exchange.baseFundamentalVal() + personalSentiment;
+        double diff = relFundamentalValue-priceMemoryVec.back();
+        double sum = relFundamentalValue+priceMemoryVec.back();
+        double meanRevScore = ((diff)/(sum))*100*(rand()%meanReversion);
 
         evalScore = (trendScore + hftScore + meanRevScore)*(intelligence/50) + noise;
-        evalScore /= pow(10,ceil(log10(evalScore)));
-        
+        evalScore /= pow(10,ceil(log10(abs(evalScore))));        
+
         if (evalScore>0){
+            int x;
             multimap<int,double> possiblePrices;
-            double lowestAsk = exchange.lowestAsk;
-            possiblePrices.insert(make_pair(7,lowestAsk));
-            for (int i=6;i!=0;--i){
+            double lowestAsk = exchange.lowAsk();
+            if (time!=0){
+                possiblePrices.insert(make_pair(7,lowestAsk));
+                int band = checkPriceBand(lowestAsk);
+                double nextPrice = lowestAsk;
+                for (int i=6;i!=-1;--i){
+                    int increment = priceIncrements.find(band) -> second;
+                    nextPrice -= increment;
+                    band = checkPriceBand(nextPrice);
+                    possiblePrices.insert(make_pair(i,nextPrice));
+                }
+                random_device rd;
+                mt19937 gen(rd());
+                binomial_distribution<> binomDis(7,evalScore);
+                x = binomDis(gen);
+            }
+            else{
                 int band = checkPriceBand(lowestAsk);
                 int increment = priceIncrements.find(band) -> second;
-                double nextPrice = lowestAsk-increment;
-                possiblePrices.insert(make_pair(i,nextPrice));
+                double nextPrice = lowestAsk+5*increment;
+                possiblePrices.insert(make_pair(15,lowestAsk+5*increment));
+                for (int i=14;i!=-1;--i){
+                    int increment = priceIncrements.find(band) -> second;
+                    nextPrice -= increment;
+                    band = checkPriceBand(nextPrice);
+                    possiblePrices.insert(make_pair(i,nextPrice));
+                }
+                random_device rd;
+                mt19937 gen(rd());
+                binomial_distribution<> binomDis(15,(evalScore+1)/3);
+                x = binomDis(gen);
             }
-            random_device rd;
-            mt19937 gen(rd());
-            binomial_distribution<> binomDis(7,evalScore);
-            int x = binomDis(gen);
             double orderPrice = possiblePrices.find(x) -> second;
             int orderQuantity = rand()%int(floor(money/orderPrice/10));
             Order order(stockId,traderId,orderPrice,orderQuantity,OrderType::BUY);
+            // cout<<"B Order: "<<orderPrice<<", "<<orderQuantity<<endl;
             if (orderQuantity != 0){
                 exchange.traderToExchangeLimit(order,time);
                 addPendingBuyOrder(order);
             }
         } 
         else if (evalScore<0 && holdings.find(stockId)!=holdings.end()){
-            double highestBid = exchange.highestBid;
+            int x;
             multimap<int,double> possiblePrices;
-            possiblePrices.insert(make_pair(7,highestBid));
-            for (int i=6;i!=0;--i){
+            double highestBid = exchange.highBid();
+            if (time!=0){
+                int band = checkPriceBand(highestBid);
+                double nextPrice = highestBid;
+                possiblePrices.insert(make_pair(7,highestBid));
+                for (int i=6;i!=-1;--i){
+                    int increment = priceIncrements.find(band) -> second;
+                    nextPrice += increment;
+                    band = checkPriceBand(nextPrice);
+                    possiblePrices.insert(make_pair(i,nextPrice));
+                }
+                random_device rd;
+                mt19937 gen(rd());
+                binomial_distribution<> binomDis(7,abs(evalScore));
+                x = binomDis(gen);
+            }
+            else{
                 int band = checkPriceBand(highestBid);
                 int increment = priceIncrements.find(band) -> second;
-                double nextPrice = highestBid + increment;
-                possiblePrices.insert(make_pair(i,nextPrice));
+                double nextPrice = highestBid - 5*increment;
+                possiblePrices.insert(make_pair(15,highestBid-5*increment));
+                for (int i=14;i!=-1;--i){
+                    increment = priceIncrements.find(band) -> second;
+                    nextPrice += increment;
+                    band = checkPriceBand(nextPrice);
+                    possiblePrices.insert(make_pair(i,nextPrice));
+                }
+                random_device rd;
+                mt19937 gen(rd());
+                binomial_distribution<> binomDis(15,(abs(evalScore)+1)/3);
+                x = binomDis(gen);
             }
-            random_device rd;
-            mt19937 gen(rd());
-            binomial_distribution<> binomDis(7,evalScore);
-            int x = binomDis(gen);
             double orderPrice = possiblePrices.find(x) -> second;
-            int holdingsQuantity = (holdings.find(stockId)->second).second;
-            int orderQuantity = rand()%holdingsQuantity;
-            Order order(stockId,traderId,orderPrice,orderQuantity,OrderType::SELL);
-            if (orderQuantity != 0){
-                exchange.traderToExchangeLimit(order,time);
-                addPendingSellOrder(order);
-            }
+            if (holdings.find(stockId)!=holdings.end()){
+                int holdingsQuantity = (holdings.find(stockId)->second).second;
+                if (holdingsQuantity!=0){
+                    int orderQuantity = rand()%holdingsQuantity;
+                    Order order(stockId,traderId,orderPrice,orderQuantity,OrderType::SELL);
+                    // cout<<"S Order: "<<orderPrice<<", "<<orderQuantity<<endl;
+                    if (orderQuantity != 0){
+                        exchange.traderToExchangeLimit(order,time);
+                        addPendingSellOrder(order);
+                    }
+                }
+            };
         }
     };
 
 public:
     Trader(const int &id, multimap<int,ExchangeAgent>& exchangeAgentList){
+        srand((unsigned) time(0));
         traderId = id;
         stocksPtr = &exchangeAgentList;
         for (auto i=exchangeAgentList.begin();i!=exchangeAgentList.end();++i){
             int stockId = i->first;
             sentiments.insert(make_pair(stockId,0));
         }
+        intelligence = rand()%100;
+        trender = rand()%100 + 1;
+        smaLength = rand()%30+10;
+        hft = rand()%100 + 1;
+        meanReversion = rand()%100 + 1;
+        tradeFreq = (rand()%30+71)*hft*0.0001;
+        money = rand()%100000000 + 500000;
     }
 
     void updateTimer(const vector<int> & stockIds,const int & time){
         timeTillNextTrade -= 1;
         if (timeTillNextTrade <= 0){
             status = TraderStatus::ORDERING;
-            int numStocks = stockIds.size();
+            double numStocks = stockIds.size();
             int divisor = ceil(numStocks/5);
             for (int id:stockIds){
                 if(rand()%divisor==0){
@@ -568,13 +695,16 @@ public:
         }
     }
 
-    void updateSentiments(const int & time){
+    void updateSentiments(const int & time, multimap<int,ExchangeAgent> & stocks){
         if (time==0){
-            resetSentiments();
+            resetSentiments(stocks);
         } 
         else{
             for (auto i=sentiments.begin();i!=sentiments.end();++i){
-                i->second += rand()%3;
+                double midPrice = (stocks.find((i ->first)) -> second).midP();
+                int band = checkPriceBand(midPrice);
+                double increment = priceIncrements.find(band) ->second;
+                i->second += ((rand()%2)*2-1)*(rand()%4)*increment;
             }
         }
     }
@@ -584,7 +714,7 @@ public:
         for (auto i=exchangeAgentList.begin();i!=exchangeAgentList.end();++i){
             int stockId = i->first;
             ExchangeAgent& exchange = i->second;
-            double midPrice = exchange.midPrice;
+            double midPrice = exchange.midP();
             if (midPriceMemory.find(stockId) == midPriceMemory.end()){
                 vector<double> vec = {midPrice};
                 midPriceMemory.insert(make_pair(stockId,vec)); 
@@ -648,9 +778,13 @@ public:
 int main(){
     int time = 0;
     int day = 0;
-    int dayLength = 100;
-    int dayLimit = 1;
 
+    int dayLimit;
+    cout << "How many days? ";
+    cin >> dayLimit;
+    int dayLength;
+    cout << "How long is one day? ";
+    cin>> dayLength;
     int num_stocks;
     cout << "How many stocks? ";
     cin >> num_stocks;
@@ -659,6 +793,8 @@ int main(){
     cin>> num_traders;
     cout<<endl;
 
+
+    cout<<"starting"<<endl;
     vector<int> stockIds;
     vector<int> traderIds;
     multimap<int,ExchangeAgent> stocks;
@@ -675,17 +811,20 @@ int main(){
         traders.insert(make_pair(traderId,trader));
         traderIds.push_back(traderId);
     }
-    for (auto i = stocks.begin();i!=stocks.end();++i){
-        ExchangeAgent exchange = i->second;
-        exchange.setTradersList(traders);
-        i->second = exchange;
-    }
+    cout<<"created traders and exchange agents"<<endl;
 
     for (auto i = stocks.begin();i!=stocks.end();++i){
         ExchangeAgent exchange = i->second;
-        exchange.initialDistributionOfStocks(traders);
+        multimap<int,Order> response = exchange.initialDistributionOfStocks(traderIds);
+        cout<<i->first<<endl;
+        for (auto k = response.begin();k!=response.end();++k){
+            auto j = traders.find(k->first);
+            Trader& trader = j->second;
+            trader.addHolding(k->second);
+        }
     }
 
+    cout<<"initializing complete"<<endl;
 
     do{
         for (auto i = stocks.begin();i!=stocks.end();++i){
@@ -694,16 +833,24 @@ int main(){
         }
         for (auto i = traders.begin();i!=traders.end();++i){
             Trader& trader = i->second;
-            trader.updateSentiments(time);
+            trader.updateSentiments(time,stocks);
             trader.updatePriceMemory();
             trader.updateTimer(stockIds,time);
         }
+
+        system("CLS");
+
         for (auto i = stocks.begin(); i!=stocks.end();++i){
             ExchangeAgent& exchange = i->second;
-            exchange.compileBook();
+            multimap<int,Order> response = exchange.compileBook();
+            for (auto j = response.begin();j!=response.end();++j){
+                auto k = traders.find(j->first);
+                Trader& trader = k->second;
+                trader.receiveResponse(j->second);
+            }
             exchange.displayBook();
         }
-
+        this_thread::sleep_for(500ms);
         time+=1;
         if (time==dayLength){
             time = 0;
@@ -714,10 +861,12 @@ int main(){
             }
             for (auto i = traders.begin();i!=traders.end();++i){
                 Trader& trader = i->second;
-                trader.updateSentiments(time);
+                trader.updateSentiments(time,stocks);
             }
         }
     } while (day!=dayLimit);
 
-
+    cout<<endl;
+    cout<<"Simulation Complete. Press ENTER to close.";
+    return 0;
 }
