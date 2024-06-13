@@ -234,7 +234,6 @@ private:
 
 public:
     ExchangeAgent(int id){
-        srand((unsigned) time(0));
         stockId = id;
         startingPriceBand = rand()%4;
         minPrice = 50 + (priceBands.find(startingPriceBand) -> second);
@@ -756,7 +755,6 @@ private:
 
 public:
     Trader(const int &id, multimap<int,ExchangeAgent>& exchangeAgentList){
-        srand((unsigned) time(0));
         traderId = id;
         stocksPtr = &exchangeAgentList;
         for (auto i=exchangeAgentList.begin();i!=exchangeAgentList.end();++i){
@@ -897,6 +895,7 @@ public:
 };
 
 int main(){
+    srand((unsigned) time(0));
     int time = 0;
     int day = 0;
 
