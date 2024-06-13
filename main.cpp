@@ -18,13 +18,6 @@
 
 using namespace std;
 
-void ClearScreen(){	
-    COORD cursorPosition;	
-    cursorPosition.X = 0;	
-    cursorPosition.Y = 0;	
-    SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), cursorPosition);
-};
-
 enum class OrderType { BUY , SELL };
 enum class FillType { FILLED , PARTIAL };
 enum class TraderStatus { ORDERING , IDLE };
@@ -975,7 +968,6 @@ int main(){
 
         this_thread::sleep_for(150ms);
 
-        // ClearScreen();
         system("CLS");
 
         cout<<"Day: "<<day<<", Time: "<<time<<endl;
