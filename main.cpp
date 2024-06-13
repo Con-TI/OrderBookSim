@@ -14,8 +14,16 @@
 #include "include/color.hpp"
 #include <random>
 #include <thread>
+#include <windows.h>
 
 using namespace std;
+
+void ClearScreen(){	
+    COORD cursorPosition;	
+    cursorPosition.X = 0;	
+    cursorPosition.Y = 0;	
+    SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), cursorPosition);
+};
 
 enum class OrderType { BUY , SELL };
 enum class FillType { FILLED , PARTIAL };
@@ -895,6 +903,7 @@ public:
 };
 
 int main(){
+    system("CLS");
     srand((unsigned) time(0));
     int time = 0;
     int day = 0;
@@ -949,6 +958,8 @@ int main(){
 
     cout<<"initializing complete"<<endl;
 
+    system("CLS");
+
     do{
         for (auto i = stocks.begin();i!=stocks.end();++i){
             ExchangeAgent& exchange = i->second;
@@ -962,6 +973,9 @@ int main(){
             trader.updateTimer(stockIds,time);
         }
 
+        this_thread::sleep_for(150ms);
+
+        // ClearScreen();
         system("CLS");
 
         cout<<"Day: "<<day<<", Time: "<<time<<endl;
@@ -976,13 +990,7 @@ int main(){
             }
             exchange.displayBook(counterLength);
         }
-        //
-        //
-        //
-        this_thread::sleep_for(150ms);
-        //
-        //
-        //
+
         time+=1;
         if (time==dayLength){
             time = 0;
