@@ -310,6 +310,7 @@ public:
 
     void endDay(){
         Book.resetBook();
+        baseFundamentalValue = midPrice;
     }
 
     multimap<int,Order> compileBook(){
@@ -474,18 +475,45 @@ public:
             lowestAsk = askI->first;
         }
         else{
-            lowestAsk = bidI->first;
+            increment = priceIncrements.find(checkPriceBand(bidI->first))->second;
+            lowestAsk = bidI->first + increment*5;
         }
         if (bidI!=Bids.end()){
             highestBid = bidI->first;            
         }
         else{
-            highestBid = askI->first;
+            increment = priceIncrements.find(checkPriceBand(askI->first))->second;
+            highestBid = askI->first - increment*5;
         }
-        if (askI==Asks.end() && bidI==Bids.end()){
-            lowestAsk = midPrice;
-            highestBid = midPrice;
+        if (askI==Asks.end() && bidI ==Bids.end()){
+            if (midPrice<5000){
+                double start = priceBands.find(checkPriceBand(midPrice))->second;
+                double end = priceBands.find(checkPriceBand(midPrice)+1)->second;
+                increment = priceIncrements.find(checkPriceBand(midPrice))->second;
+                int num = (end-start/increment);
+                for (int i=0; i<num; ++i){
+                    highestBid = start + i*increment;
+                    lowestAsk = start + (i+1)*increment;
+                    if (highestBid<midPrice<lowestAsk){
+                       break; 
+                    }
+                }
+            }
+            else{
+                double start = 5000;
+                double end = 100000;
+                increment = priceIncrements.find(checkPriceBand(midPrice))->second;
+                int num = (end-start/increment);          
+                for (int i=0; i<num; ++i){
+                    highestBid = start + i*increment;
+                    lowestAsk = start + (i+1)*increment;
+                    if (highestBid<midPrice<lowestAsk){
+                       break; 
+                    }
+                }
+            }
         }
+
         double midprice = round((((highestBid) + (lowestAsk)))/2*100)/100;
         double BAspread = round((((lowestAsk)-(highestBid))/(highestBid)*100)*100)/100;
         midPrice = midprice;
@@ -589,10 +617,10 @@ private:
         vector<double>& priceMemoryVec = midPriceMemory.find(stockId)->second;
         double mean = accumulate(priceMemoryVec.begin(),priceMemoryVec.end(),0.0)/priceMemoryVec.size();
         double trend;
-        if (mean*(1+smaLength/50)<priceMemoryVec.back()){
+        if (mean<priceMemoryVec.back()){
             trend = priceMemoryVec.back()/mean;
         } 
-        else if (mean>priceMemoryVec.back()*(1+smaLength/50)){
+        else if (mean>priceMemoryVec.back()){
             trend = -mean/priceMemoryVec.back();
         }
         else{
@@ -604,23 +632,23 @@ private:
         double hftScore = spread*(rand()%hft);
 
         double personalSentiment = sentiments.find(stockId)->second;
-        double relFundamentalValue = exchange.baseFundamentalVal() + personalSentiment;
+        double relFundamentalValue = (exchange.baseFundamentalVal() + mean)/2 + personalSentiment;
         double diff = relFundamentalValue-priceMemoryVec.back();
         double sum = relFundamentalValue+priceMemoryVec.back();
-        double meanRevScore = ((diff)/(sum))*100*(rand()%meanReversion);
+        double meanRevScore = ((diff)/(sum))*200*(rand()%meanReversion);
 
-        evalScore = (trendScore + hftScore + meanRevScore)*(intelligence/50) + noise;
+        evalScore = (trendScore + hftScore + meanRevScore) + noise;
         evalScore /= pow(10,ceil(log10(abs(evalScore))));        
 
         if (evalScore>0){
             int x;
             multimap<int,double> possiblePrices;
-            double lowestAsk = exchange.lowAsk();
+            double lowestAsk = exchange.lowAsk() + priceIncrements.find(checkPriceBand(exchange.lowAsk())) -> second;
             if (time!=0){
-                possiblePrices.insert(make_pair(7,lowestAsk));
+                possiblePrices.insert(make_pair(8,lowestAsk));
                 int band = checkPriceBand(lowestAsk);
                 double nextPrice = lowestAsk;
-                for (int i=6;i!=-1;--i){
+                for (int i=7;i!=-1;--i){
                     int increment = priceIncrements.find(band) -> second;
                     nextPrice -= increment;
                     band = checkPriceBand(nextPrice);
@@ -628,7 +656,7 @@ private:
                 }
                 random_device rd;
                 mt19937 gen(rd());
-                binomial_distribution<> binomDis(7,evalScore);
+                binomial_distribution<> binomDis(8,evalScore);
                 x = binomDis(gen);
             }
             else{
@@ -644,7 +672,7 @@ private:
                 }
                 random_device rd;
                 mt19937 gen(rd());
-                binomial_distribution<> binomDis(15,(evalScore+1)/3);
+                binomial_distribution<> binomDis(15,(evalScore+0.5)/2);
                 x = binomDis(gen);
             }
             double orderPrice = possiblePrices.find(x) -> second;
@@ -665,7 +693,7 @@ private:
         else if (evalScore<0 && holdings.find(stockId)!=holdings.end()){
             int x;
             multimap<int,double> possiblePrices;
-            double highestBid = exchange.highBid();
+            double highestBid = exchange.highBid() - priceIncrements.find(checkPriceBand(exchange.highBid())) -> second;;
             if (time!=0){
                 int band = checkPriceBand(highestBid);
                 double nextPrice = highestBid;
@@ -694,7 +722,7 @@ private:
                 }
                 random_device rd;
                 mt19937 gen(rd());
-                binomial_distribution<> binomDis(15,(abs(evalScore)+1)/3);
+                binomial_distribution<> binomDis(15,(abs(evalScore)+0.5)/2);
                 x = binomDis(gen);
             }
             double orderPrice = possiblePrices.find(x) -> second;
@@ -742,7 +770,7 @@ public:
         meanReversion = rand()%100 + 1;
         tradeFreq = (rand()%30+71)*hft*0.0001;
         money = rand()%100000000 + 500000;
-        riskTolerance = rand()%9+2;
+        riskTolerance = rand()%11+5;
     }
 
     void updateTimer(const vector<int> & stockIds,const int & time){
